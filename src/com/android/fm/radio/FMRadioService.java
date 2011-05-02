@@ -517,11 +517,17 @@ public class FMRadioService extends Service {
 
     private void startFM(){
         Log.d(LOGTAG, "In startFM");
+        if (FmSharedPreferences.getSpeaker()) {
+            AudioSystem.setForceUse(AudioSystem.FOR_MEDIA, AudioSystem.FORCE_SPEAKER);
+        } else {
+            AudioSystem.setForceUse(AudioSystem.FOR_MEDIA, AudioSystem.FORCE_HEADPHONES);
+        }
         AudioSystem.setDeviceConnectionState(AudioSystem.DEVICE_OUT_FM, AudioSystem.DEVICE_STATE_AVAILABLE, "");
     }
 
     private void stopFM(){
         Log.d(LOGTAG, "In stopFM");
+        AudioSystem.setForceUse(AudioSystem.FOR_MEDIA, AudioSystem.FORCE_NONE);
         AudioSystem.setDeviceConnectionState(AudioSystem.DEVICE_OUT_FM, AudioSystem.DEVICE_STATE_UNAVAILABLE, "");
     }
 
