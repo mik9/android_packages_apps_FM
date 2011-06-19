@@ -299,6 +299,7 @@ public class FMRadioService extends Service {
                     Log.v(LOGTAG, "AudioFocus: received AUDIOFOCUS_LOSS, turning FM off");
 
                     if(isFmOn()) {
+                        stopFM();
                         fmOff();
                     }
                     break;
@@ -517,18 +518,16 @@ public class FMRadioService extends Service {
 
     private void startFM(){
         Log.d(LOGTAG, "In startFM");
-        if (FmSharedPreferences.getSpeaker()) {
+        if(mPrefs.getSpeaker()) {
             AudioSystem.setForceUse(AudioSystem.FOR_MEDIA, AudioSystem.FORCE_SPEAKER);
-        } else {
-            AudioSystem.setForceUse(AudioSystem.FOR_MEDIA, AudioSystem.FORCE_HEADPHONES);
         }
-        AudioSystem.setDeviceConnectionState(AudioSystem.DEVICE_OUT_FM, AudioSystem.DEVICE_STATE_AVAILABLE, "reset_fm");
+        AudioSystem.setDeviceConnectionState(AudioSystem.DEVICE_OUT_FM, AudioSystem.DEVICE_STATE_AVAILABLE, "fm_reset");
     }
 
     private void stopFM(){
         Log.d(LOGTAG, "In stopFM");
         AudioSystem.setForceUse(AudioSystem.FOR_MEDIA, AudioSystem.FORCE_NONE);
-        AudioSystem.setDeviceConnectionState(AudioSystem.DEVICE_OUT_FM, AudioSystem.DEVICE_STATE_UNAVAILABLE, "reset_fm");
+        AudioSystem.setDeviceConnectionState(AudioSystem.DEVICE_OUT_FM, AudioSystem.DEVICE_STATE_UNAVAILABLE, "");
     }
 
     /* Handle Phone Call + FM Concurrency */
