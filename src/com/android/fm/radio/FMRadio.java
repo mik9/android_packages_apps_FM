@@ -305,6 +305,8 @@ public class FMRadio extends Activity {
         }
         mSpeakerButton = (ImageButton) findViewById(R.id.btn_speaker);
         mSpeakerButton.setOnClickListener(mSpeakerSwitchClickListener);
+        if (!context.getResources().getBoolean(R.bool.speaker_supported))
+            mSpeakerButton.setVisibility(View.INVISIBLE);
 
         if (!context.getResources().getBoolean(R.bool.speaker_supported))
             mSpeakerButton.setVisibility(View.INVISIBLE);
