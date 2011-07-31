@@ -44,6 +44,8 @@ public class FMRadioService extends Service {
     public static final String CMDNEXT = "next";
     public static final String CMDPREVIOUS = "previous";
 
+    private Context context;
+
     /**
      * Static translation for audio output going through a wired headset
      */
@@ -197,6 +199,8 @@ public class FMRadioService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+
+        context = getApplicationContext();
 
         // Grab a handle to the AudioManager
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
@@ -454,7 +458,10 @@ public class FMRadioService extends Service {
                 // Verify the FM radio is turned on
                 if(isFmOn()) {
                     Log.d(LOGTAG, "Moving up in frequency");
-                    nextFrequency(true);
+                    if (context.getResources().getBoolean(R.bool.seek_supported))
+                        seek(true);
+                    else
+                        nextFrequency(true);
 
                     try {
                         /*
@@ -473,7 +480,10 @@ public class FMRadioService extends Service {
                 // Verify the FM radio is turned on
                 if(isFmOn()) {
                     Log.d(LOGTAG, "Moving down in frequency");
-                    nextFrequency(false);
+                    if (context.getResources().getBoolean(R.bool.seek_supported))
+                        seek(false);
+                    else
+                        nextFrequency(false);
 
                     try {
                         /*
@@ -522,12 +532,28 @@ public class FMRadioService extends Service {
             AudioSystem.setForceUse(AudioSystem.FOR_MEDIA, AudioSystem.FORCE_SPEAKER);
         }
         AudioSystem.setDeviceConnectionState(AudioSystem.DEVICE_OUT_FM, AudioSystem.DEVICE_STATE_AVAILABLE, "fm_reset");
+        lockscreenBroadcast(true,getFreq());
     }
 
     private void stopFM(){
         Log.d(LOGTAG, "In stopFM");
         AudioSystem.setForceUse(AudioSystem.FOR_MEDIA, AudioSystem.FORCE_NONE);
         AudioSystem.setDeviceConnectionState(AudioSystem.DEVICE_OUT_FM, AudioSystem.DEVICE_STATE_UNAVAILABLE, "");
+        lockscreenBroadcast(false,0);
+    }
+
+    private void lockscreenBroadcast(boolean on,int freq){
+        Intent i = new Intent("com.android.music.metachanged");
+        if(on){
+            i.putExtra("artist", "- "+Double.parseDouble(Integer.toString(freq))/1000+" MHz");
+            i.putExtra("track", "");
+            i.putExtra("playing", true);
+        } else {
+            i.putExtra("artist", (String)null);
+            i.putExtra("track", (String)null);
+            i.putExtra("playing", false);
+        }
+        sendStickyBroadcast(i);
     }
 
     /* Handle Phone Call + FM Concurrency */
@@ -906,6 +932,7 @@ public class FMRadioService extends Service {
         // This will disable the FM radio device
         if (mReceiver != null) {
             bStatus = mReceiver.disable();
+            bStatus = mReceiver.release();
             mReceiver = null;
         }
         stop();
@@ -1031,6 +1058,7 @@ public class FMRadioService extends Service {
             bCommandSent = true;
             updateNotification();
         }
+        lockscreenBroadcast(true,frequency);
         return bCommandSent;
     }
 
