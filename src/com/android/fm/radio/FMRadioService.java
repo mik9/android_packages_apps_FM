@@ -3,7 +3,6 @@ package com.android.fm.radio;
 
 import com.android.fm.R;
 import com.android.fm.utils.FrequencyPicker;
-
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.app.Service;
@@ -12,6 +11,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.hardware.fmradio.FmConfig;
 import android.hardware.fmradio.FmReceiver;
 import android.hardware.fmradio.FmRxEvCallbacksAdaptor;
@@ -19,6 +19,7 @@ import android.hardware.fmradio.FmRxRdsData;
 import android.media.AudioManager;
 import android.media.AudioManager.OnAudioFocusChangeListener;
 import android.media.AudioSystem;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
@@ -27,6 +28,7 @@ import android.os.RemoteException;
 import android.os.PowerManager.WakeLock;
 import android.util.Log;
 import android.widget.RemoteViews;
+import android.os.SystemProperties;
 
 import java.lang.ref.WeakReference;
 
@@ -197,15 +199,10 @@ public class FMRadioService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-
         context = getApplicationContext();
 
         // Grab a handle to the AudioManager
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-
-        // Register our MediaButtonEventReceiver so it receives the lockscreen events
-        mAudioManager.registerMediaButtonEventReceiver(new ComponentName(getPackageName(),
-                FMMediaButtonIntentReceiver.class.getName()));
 
         // Instantiate a handle to our shared preferences
         // TODO: These should be stored in a properties file and read from via a ResourceBundle
@@ -279,10 +276,8 @@ public class FMRadioService extends Service {
         mWakeLock.release();
 
         super.onDestroy();
-
         // Unregister as a receiver for media button events
-        mAudioManager.unregisterMediaButtonEventReceiver(new ComponentName(getPackageName(),
-                FMMediaButtonIntentReceiver.class.getName()));
+        setMediaButtonReceiver(false);
     }
 
     private OnAudioFocusChangeListener mAudioFocusListener = new OnAudioFocusChangeListener() {
@@ -460,6 +455,8 @@ public class FMRadioService extends Service {
                          */
                         if ((mServiceInUse) && (mCallbacks != null)) {
                             mCallbacks.onTuneStatusChanged();
+                        } else {
+                            lockscreenBroadcast(true,getFreq());
                         }
                     } catch (RemoteException e) {
                         e.printStackTrace();
@@ -482,6 +479,8 @@ public class FMRadioService extends Service {
                          */
                         if ((mServiceInUse) && (mCallbacks != null)) {
                             mCallbacks.onTuneStatusChanged();
+                        } else {
+                            lockscreenBroadcast(true,getFreq());
                         }
                     } catch (RemoteException e) {
                         e.printStackTrace();
@@ -518,6 +517,11 @@ public class FMRadioService extends Service {
 
     private void startFM(){
         Log.d(LOGTAG, "In startFM");
+        if (SystemProperties.OMAP_ENHANCEMENT) {
+            Intent fm_intent = new Intent("android.intent.action.FM_PLUG");
+            fm_intent.putExtra("state", 1);
+            context.sendBroadcast(fm_intent);
+        }
         if(mPrefs.getSpeaker()) {
             AudioSystem.setForceUse(AudioSystem.FOR_MEDIA, AudioSystem.FORCE_SPEAKER);
         }
@@ -527,6 +531,11 @@ public class FMRadioService extends Service {
 
     private void stopFM(){
         Log.d(LOGTAG, "In stopFM");
+        if (SystemProperties.OMAP_ENHANCEMENT) {
+            Intent fm_intent = new Intent("android.intent.action.FM_PLUG");
+            fm_intent.putExtra("state", 0);
+            context.sendBroadcast(fm_intent);
+        }
         AudioSystem.setForceUse(AudioSystem.FOR_MEDIA, AudioSystem.FORCE_NONE);
         AudioSystem.setDeviceConnectionState(AudioSystem.DEVICE_OUT_FM, AudioSystem.DEVICE_STATE_UNAVAILABLE, "");
         lockscreenBroadcast(false,0);
@@ -778,6 +787,21 @@ public class FMRadioService extends Service {
 
     private final IBinder mBinder = new ServiceStub(this);
 
+    private void setMediaButtonReceiver(boolean enable) {
+        int flag=(enable ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED :
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED);
+        ComponentName component = new ComponentName(getPackageName(),
+                FMMediaButtonIntentReceiver.class.getName());
+        getPackageManager().setComponentEnabledSetting(component, flag, PackageManager.DONT_KILL_APP);
+        if (enable) {
+            mAudioManager.registerMediaButtonEventReceiver(new ComponentName(getPackageName(),
+                    FMMediaButtonIntentReceiver.class.getName()));
+        } else {
+            mAudioManager.unregisterMediaButtonEventReceiver(new ComponentName(getPackageName(),
+                    FMMediaButtonIntentReceiver.class.getName()));
+        }
+    }
+
     /*
      * Turn ON FM: Powers up FM hardware, and initializes the FM module .
      * @return true if fm Enable api was invoked successfully, false if the api
@@ -786,8 +810,6 @@ public class FMRadioService extends Service {
     private boolean fmOn() {
         boolean bStatus = false;
         Log.d(LOGTAG, "fmOn");
-        mAudioManager.registerMediaButtonEventReceiver(new ComponentName(getPackageName(), FMMediaButtonIntentReceiver.class.getName()));
-        mAudioManager.requestAudioFocus(mAudioFocusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
 
         if (mReceiver == null) {
             mReceiver = new FmReceiver(FMRADIO_DEVICE_FD_STRING, null);
@@ -802,6 +824,10 @@ public class FMRadioService extends Service {
                 bStatus = true;
                 Log.d(LOGTAG, "mReceiver.already enabled");
             } else {
+                mAudioManager.requestAudioFocus(mAudioFocusListener, AudioManager.STREAM_MUSIC,
+                        AudioManager.AUDIOFOCUS_GAIN);
+                setMediaButtonReceiver(true);
+                mMuted = false;
                 // This sets up the FM radio device
                 FmConfig config = FmSharedPreferences.getFMConfiguration();
                 Log.d(LOGTAG, "fmOn: RadioBand   :" + config.getRadioBand());
@@ -850,6 +876,7 @@ public class FMRadioService extends Service {
     private boolean fmOff() {
         boolean bStatus = false;
         Log.d(LOGTAG, "fmOff");
+        setMediaButtonReceiver(false);
         mAudioManager.abandonAudioFocus(mAudioFocusListener);
         stopFM();
         // This will disable the FM radio device
